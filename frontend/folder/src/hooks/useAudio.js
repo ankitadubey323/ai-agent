@@ -1,15 +1,16 @@
 import { useRef, useCallback } from 'react'
 
 export function useAudio({ onChunk, onStop, onError }) {
-  const mediaRecorderRef = useRef(null)
-  const audioChunksRef   = useRef([])
-  const audioContextRef  = useRef(null)
-  const mp3BufferRef     = useRef([])
-  const isPlayingRef     = useRef(false)
+  const audioContextRef    = useRef(null)
+  const processorRef       = useRef(null)
+  const streamRef          = useRef(null)
+  const mp3BufferRef       = useRef([])
+  const isPlayingRef       = useRef(false)
 
   const ensureAudioContext = useCallback(() => {
     if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
-      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)()
+      // 16000 Hz — AssemblyAI ke liye
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 })
     }
     if (audioContextRef.current.state === 'suspended') {
       audioContextRef.current.resume()
@@ -19,28 +20,30 @@ export function useAudio({ onChunk, onStop, onError }) {
 
   const startRecording = useCallback(async () => {
     try {
-      ensureAudioContext()
-      const stream   = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
-      mediaRecorderRef.current = recorder
-      audioChunksRef.current   = []
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data)
-      }
+      const ctx = ensureAudioContext()
+      const source = ctx.createMediaStreamSource(stream)
 
-      recorder.onstop = async () => {
-        const blob  = new Blob(audioChunksRef.current, { type: 'audio/webm' })
-        const buf   = await blob.arrayBuffer()
-        const uint8 = new Uint8Array(buf)
-        for (let i = 0; i < uint8.length; i += 4096) {
-          onChunk(uint8.slice(i, i + 4096))
+      // ScriptProcessor se real-time PCM chunks
+      const processor = ctx.createScriptProcessor(4096, 1, 1)
+      processorRef.current = processor
+
+      processor.onaudioprocess = (e) => {
+        const float32 = e.inputBuffer.getChannelData(0)
+        // Float32 → Int16 PCM convert
+        const int16 = new Int16Array(float32.length)
+        for (let i = 0; i < float32.length; i++) {
+          const s = Math.max(-1, Math.min(1, float32[i]))
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
         }
-        onStop()
-        stream.getTracks().forEach(t => t.stop())
+        onChunk(new Uint8Array(int16.buffer))
       }
 
-      recorder.start(250)
+      source.connect(processor)
+      processor.connect(ctx.destination)
+
       return true
     } catch (err) {
       console.error('Error accessing microphone:', err)
@@ -50,8 +53,16 @@ export function useAudio({ onChunk, onStop, onError }) {
   }, [onChunk, onStop, onError, ensureAudioContext])
 
   const stopRecording = useCallback(() => {
-    mediaRecorderRef.current?.stop()
-  }, [])
+    if (processorRef.current) {
+      processorRef.current.disconnect()
+      processorRef.current = null
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+    onStop()
+  }, [onStop])
 
   const accumulateChunk = useCallback((chunk) => {
     try {
@@ -65,7 +76,6 @@ export function useAudio({ onChunk, onStop, onError }) {
       } else if (chunk?.buffer instanceof ArrayBuffer) {
         arr = new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
       } else if (typeof chunk === 'object' && chunk !== null) {
-        // socket.io plain object {0:1, 1:2, ...}
         arr = new Uint8Array(Object.values(chunk))
       } else {
         console.warn('[Audio] Unknown chunk type:', typeof chunk)

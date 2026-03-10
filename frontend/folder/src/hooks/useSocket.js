@@ -4,18 +4,18 @@ import { io } from 'socket.io-client'
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 
 export function useSocket(handlers) {
-  const socketRef  = useRef(null)
+  const socketRef   = useRef(null)
   const handlersRef = useRef(handlers)
 
-  // Always keep latest handlers in ref — fixes stale closure problem
   useEffect(() => {
     handlersRef.current = handlers
   })
 
   useEffect(() => {
     const socket = io(BACKEND_URL, {
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
       reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     })
     socketRef.current = socket
 
