@@ -31,7 +31,7 @@ An intelligent voice-enabled AI doctor assistant that listens to patients, under
 | Speech-to-Text | OpenAI Whisper |
 | Text-to-Speech | Web Speech API |
 | Appointment | Google Calendar API |
-| Database | MongoDB |
+| Database | PINECONE |
 | Deployment | Vercel (Frontend), Render (Backend) |
 
 ---
@@ -80,10 +80,12 @@ npm install
 Create a `.env` file in `/backend`:
 ```env
 GROQ_API_KEY=your_groq_api_key
-MONGODB_URI=your_mongodb_uri
+ASSEMBLY_KEY=YOUR KEY
+ASSEMBLY_VOICE_ID=YOUR ID
+PINECONE_KEY=YOUR KEY
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
-PORT=5000
+PORT=3000
 ```
 
 Run backend:
@@ -95,11 +97,12 @@ npm run start
 ```bash
 cd frontend
 npm install
+REACT-VITE
 ```
 
 Create a `.env` file in `/frontend`:
 ```env
-VITE_API_URL=http://localhost:5000
+VITE_API_URL=http://localhost:3000
 ```
 
 Run frontend:
