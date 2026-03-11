@@ -355,6 +355,13 @@ process.on('unhandledRejection', (err) => { console.error('[Server] Unhandled:',
 async function start() {
     try {
         await initRNNoise()
+        console.log('[TTS] Preloading Kokoro model...')
+        try {
+            await textToSpeech('hello')
+            console.log('[TTS] Kokoro ready!')
+        } catch (e) {
+            console.warn('[TTS] Preload failed:', e.message)
+        }
         if (!isAuthenticated()) {
             console.log('[Calendar]   Not authorized. Visit http://localhost:' + config.port + '/auth/google')
         } else {
