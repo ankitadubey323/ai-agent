@@ -21,7 +21,8 @@ import {
     SlotConflictError,
     BookingError,
 } from './src/services/calendar.js'
-
+import { sendDoctorEmail, sendPatientEmail } from './src/services/email.js'
+import appointmentRouter from './src/routes/appointments.js'
 dotenv.config()
 
 const app    = express()
@@ -73,6 +74,7 @@ app.get('/auth/google', rateLimit(60_000, 5), (req, res) => {
     console.log('[Auth] Redirecting to Google OAuth')
     res.redirect(getAuthUrl())
 })
+app.use('/api/appointments', appointmentRouter)
 
 app.get('/auth/callback', async (req, res) => {
     const { code } = req.query
@@ -268,46 +270,79 @@ io.on('connection', async (socket) => {
     })
 
     socket.on('book-slot', async ({ slotStart, slotEnd, patientName: nameOverride, patientEmail: emailOverride }) => {
-        const name  = nameOverride?.trim()  || patientName  || 'Patient'
-        const email = emailOverride?.trim() || patientEmail || null
-
-        const validationError = validateBookSlot({ slotStart, slotEnd, patientName: name })
-        if (validationError) {
-            socket.emit('error', { message: validationError })
-            return
-        }
-        if (!isAuthenticated()) {
-            socket.emit('error', { message: 'Doctor calendar not connected.', code: 'AUTH_REQUIRED' })
-            return
-        }
-        try {
-            const confirmation = await bookAppointment({
-                patientName:  name,
-                patientEmail: email,
-                doctorName:   selectedDoctor?.name || 'Doctor',
-                symptoms:     patientSymptoms.trim().slice(0, 500),
-                slotStart,
-                slotEnd,
-            })
-            lastBookedEventId = confirmation.eventId
-            const confirmMsg = `Aapki appointment confirm ho gayi! ${confirmation.doctorName} ke saath ${new Date(confirmation.start).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} ko milenge.`
-            socket.emit('appointment-confirmed', {
-                message:   confirmMsg,
-                doctor:    confirmation.doctorName,
-                patient:   confirmation.patientName,
-                time:      new Date(confirmation.start).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-                eventLink: confirmation.eventLink,
-                eventId:   confirmation.eventId,
-            })
-            speakToClient(confirmMsg).catch(console.error)
-        } catch (err) {
-            console.error('[Server] Booking error:', err.message)
-            const code = err instanceof SlotConflictError ? 'SLOT_CONFLICT'
-                       : err instanceof CalendarAuthError ? 'AUTH_REQUIRED'
-                       : 'BOOKING_FAILED'
-            socket.emit('error', { message: err.message, code })
-        }
-    })
+    const name  = nameOverride?.trim()  || patientName  || 'Patient'
+    const email = emailOverride?.trim() || patientEmail || null
+ 
+    const validationError = validateBookSlot({ slotStart, slotEnd, patientName: name })
+    if (validationError) {
+        socket.emit('error', { message: validationError })
+        return
+    }
+    if (!isAuthenticated()) {
+        socket.emit('error', { message: 'Doctor calendar not connected.', code: 'AUTH_REQUIRED' })
+        return
+    }
+    try {
+        const confirmation = await bookAppointment({
+            patientName:  name,
+            patientEmail: email,
+            doctorName:   selectedDoctor?.name || 'Doctor',
+            symptoms:     patientSymptoms.trim().slice(0, 500),
+            slotStart,
+            slotEnd,
+        })
+ 
+        lastBookedEventId = confirmation.eventId
+ 
+        const confirmMsg = `Aapki appointment confirm ho gayi! ${confirmation.doctorName} ke saath ${new Date(confirmation.start).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} ko milenge.`
+ 
+        socket.emit('appointment-confirmed', {
+            message:   confirmMsg,
+            doctor:    confirmation.doctorName,
+            patient:   confirmation.patientName,
+            time:      new Date(confirmation.start).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+            eventLink: confirmation.eventLink,
+            eventId:   confirmation.eventId,
+        })
+ 
+        speakToClient(confirmMsg).catch(console.error)
+ 
+        // ── Email bhejo dono ko (background mein) ────────────────
+        const doctorEmail = selectedDoctor?.email || null
+        const doctorSpec  = selectedDoctor?.specialization || ''
+ 
+        // Dr. ko email
+        sendDoctorEmail({
+            doctorName:   selectedDoctor?.name || 'Doctor',
+            doctorEmail,
+            patientName:  name,
+            patientEmail: email,
+            symptoms:     patientSymptoms.trim().slice(0, 500),
+            slotStart,
+            slotEnd,
+        }).catch(err => console.error('[Email] Doctor email error:', err.message))
+ 
+        // Patient ko email
+        sendPatientEmail({
+            patientName:          name,
+            patientEmail:         email,
+            doctorName:           selectedDoctor?.name || 'Doctor',
+            doctorSpecialization: doctorSpec,
+            symptoms:             patientSymptoms.trim().slice(0, 500),
+            slotStart,
+            slotEnd,
+            eventLink:            confirmation.eventLink,
+        }).catch(err => console.error('[Email] Patient email error:', err.message))
+ 
+    } catch (err) {
+        console.error('[Server] Booking error:', err.message)
+        const code = err instanceof SlotConflictError ? 'SLOT_CONFLICT'
+                   : err instanceof CalendarAuthError ? 'AUTH_REQUIRED'
+                   : 'BOOKING_FAILED'
+        socket.emit('error', { message: err.message, code })
+    }
+})
+ 
 
     socket.on('cancel-appointment', async ({ eventId } = {}) => {
         const id = eventId || lastBookedEventId
@@ -355,13 +390,7 @@ process.on('unhandledRejection', (err) => { console.error('[Server] Unhandled:',
 async function start() {
     try {
         await initRNNoise()
-        console.log('[TTS] Preloading Kokoro model...')
-        try {
-            await textToSpeech('hello')
-            console.log('[TTS] Kokoro ready!')
-        } catch (e) {
-            console.warn('[TTS] Preload failed:', e.message)
-        }
+        console.log('[TTS] Edge TTS ready!')  
         if (!isAuthenticated()) {
             console.log('[Calendar]   Not authorized. Visit http://localhost:' + config.port + '/auth/google')
         } else {
