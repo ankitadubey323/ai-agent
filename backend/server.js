@@ -21,8 +21,9 @@ import {
     SlotConflictError,
     BookingError,
 } from './src/services/calendar.js'
-import { sendDoctorEmail, sendPatientEmail } from './src/services/email.js'
+import { sendDoctorBookingRequest, sendPatientConfirmation, sendPatientRejection } from './src/services/email.js'
 import appointmentRouter from './src/routes/appointments.js'
+
 dotenv.config()
 
 const app    = express()
@@ -312,26 +313,25 @@ io.on('connection', async (socket) => {
         const doctorSpec  = selectedDoctor?.specialization || ''
  
         // Dr. ko email
-        sendDoctorEmail({
+        sendDoctorBookingRequest({
             doctorName:   selectedDoctor?.name || 'Doctor',
             doctorEmail,
             patientName:  name,
             patientEmail: email,
             symptoms:     patientSymptoms.trim().slice(0, 500),
-            slotStart,
-            slotEnd,
+            date:         new Date(slotStart).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+            token:        confirmation.eventId || ''
         }).catch(err => console.error('[Email] Doctor email error:', err.message))
  
         // Patient ko email
-        sendPatientEmail({
+        sendPatientConfirmation({
             patientName:          name,
             patientEmail:         email,
             doctorName:           selectedDoctor?.name || 'Doctor',
+            doctorPhone:          selectedDoctor?.phone || '',
             doctorSpecialization: doctorSpec,
+            date:                 new Date(slotStart).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
             symptoms:             patientSymptoms.trim().slice(0, 500),
-            slotStart,
-            slotEnd,
-            eventLink:            confirmation.eventLink,
         }).catch(err => console.error('[Email] Patient email error:', err.message))
  
     } catch (err) {
