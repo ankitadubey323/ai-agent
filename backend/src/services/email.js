@@ -175,8 +175,8 @@ export async function sendPatientRejection({
                 </div>
             `
         })
-        console.log(`[Email] ✅ Rejection email sent to patient ${patientEmail}`)
+        console.log(`[Email] Rejection email sent to patient ${patientEmail}`)
     } catch (err) {
-        console.error('[Email] ❌ Patient rejection email failed:', err.message)
+        console.error('[Email] Patient rejection email failed:', err.message)
     }
 }

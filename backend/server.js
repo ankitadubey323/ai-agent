@@ -22,7 +22,7 @@ import {
     BookingError,
 } from './src/services/calendar.js'
 import { sendDoctorBookingRequest, sendPatientConfirmation, sendPatientRejection } from './src/services/email.js'
-import appointmentRouter from './src/routes/appointments.js'
+import appointmentRouter from './routes/appointments.js'
 
 dotenv.config()
 

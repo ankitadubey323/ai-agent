@@ -1104,7 +1104,8 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 const PINECONE_KEY  = process.env.PINECONE_API_KEY
-const PINECONE_HOST = process.env.PINECONE_HOST
+// const PINECONE_HOST = process.env.PINECONE_HOST
+const queryRes = await fetch(`https://${process.env.PINECONE_HOST}/query`)
 
 // ─── Embedding via REST API ───────────────────────────────────────
 async function getEmbedding(text) {

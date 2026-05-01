@@ -418,11 +418,10 @@ export default function App() {
     setShowSlots(false)
   }
 
-  function handleSubmitName(name, email) {
+  function handleSubmitName(name) {
     setPatientName(name)
-    if (email) setPatientEmail(email) // ← email bhi save karo
     setShowNameModal(false)
-    emitRef.current?.('set-patient-info', { name, email })
+    emitRef.current?.('set-patient-info', { name })
   }
 
   return (
